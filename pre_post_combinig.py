@@ -55,6 +55,17 @@ if pre_file and post_file:
             merged_df = pd.merge(pre_df, post_df, left_on=pre_merge_col, right_on=post_merge_col,
                                  suffixes=("_pre", "_post"), how=merge_type)
 
+            def try_convert_numeric(df):
+                for col in df.columns:
+                    try:
+                        # Will fail if non-numeric values exist
+                        df[col] = pd.to_numeric(df[col], errors='raise')
+                    except:
+                        pass  # Keep as is if conversion fails
+                return df
+
+            merged_df = try_convert_numeric(merged_df)
+
             # Store merged dataframe in session state
             st.session_state["merged_df"] = merged_df
             st.success(f"✅ Merging Successful! {len(merged_df)} rows merged.")
@@ -72,20 +83,10 @@ if pre_file and post_file:
                     pre_unmatched)} rows from Pre-Survey could not be merged (No match in Post-Survey).")
                 st.dataframe(pre_unmatched, hide_index=True)
 
-                # Option to expand and view full rows
-                if st.checkbox("Show full unmatched Pre-Survey rows"):
-                    st.dataframe(
-                        pre_df[~pre_df[pre_merge_col].isin(merged_df[pre_merge_col])])
-
             if not post_unmatched.empty:
                 st.warning(f"{len(
                     post_unmatched)} rows from Post-Survey could not be merged (No match in Pre-Survey).")
                 st.dataframe(post_unmatched, hide_index=True)
-
-                # Option to expand and view full rows
-                if st.checkbox("Show full unmatched Post-Survey rows"):
-                    st.dataframe(
-                        post_df[~post_df[post_merge_col].isin(merged_df[post_merge_col])])
 
         # Data Preprocessing
         if "merged_df" in st.session_state:
@@ -188,18 +189,32 @@ if pre_file and post_file:
             st.subheader("📊 Pre-Post Survey Comparison")
             if "merged_df" in st.session_state:
                 merged_df = st.session_state["merged_df"]
+
+                # Identify numeric columns
                 numeric_cols = [col for col in merged_df.columns if merged_df[col].dtype in [
                     'int64', 'float64']]
 
-                # Select Pre-Post Columns
+                # Select Pre-Survey Column
                 selected_pre_col = st.selectbox(
-                    # if col.endswith("_pre_mapped")])
-                    "Select Pre-Survey Column", [col for col in numeric_cols if col.endswith("_pre_mapped") or col.endswith("_pre")])
+                    "Select Pre-Survey Column",
+                    [col for col in numeric_cols]
+                )
+
+                # Identify Post-Survey Column
                 selected_post_col = None
 
                 if selected_pre_col:
-                    selected_post_col = selected_pre_col.replace(
-                        "_pre", "_post") if selected_pre_col.replace("_pre", "_post") in numeric_cols else None
+                    default_post_col = selected_pre_col.replace(
+                        "_pre", "_post") if "_pre" in selected_pre_col else None
+
+                    # If an exact post column exists, use it; otherwise, allow manual selection
+                    if default_post_col in numeric_cols:
+                        selected_post_col = default_post_col
+                    else:
+                        selected_post_col = st.selectbox(
+                            "Select Post-Survey Column (if no default found)",
+                            [col for col in numeric_cols if col != selected_pre_col]
+                        )
 
                 if selected_post_col:
                     # Filter & Grouping Options
