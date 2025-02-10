@@ -60,18 +60,32 @@ if pre_file and post_file:
             st.success(f"✅ Merging Successful! {len(merged_df)} rows merged.")
             st.dataframe(merged_df.head())
 
-            # Show unmatched rows
+            # Identify unmatched rows in both datasets
             pre_unmatched = pre_df[~pre_df[pre_merge_col].isin(
-                merged_df[pre_merge_col])]
+                merged_df[pre_merge_col])][[pre_merge_col]]
             post_unmatched = post_df[~post_df[post_merge_col].isin(
-                merged_df[post_merge_col])]
+                merged_df[post_merge_col])][[post_merge_col]]
 
+            # Display only merge column values by default
             if not pre_unmatched.empty:
-                st.warning(
-                    f"{len(pre_unmatched)} rows from Pre-Survey could not be merged.")
+                st.warning(f"{len(
+                    pre_unmatched)} rows from Pre-Survey could not be merged (No match in Post-Survey).")
+                st.dataframe(pre_unmatched, hide_index=True)
+
+                # Option to expand and view full rows
+                if st.checkbox("Show full unmatched Pre-Survey rows"):
+                    st.dataframe(
+                        pre_df[~pre_df[pre_merge_col].isin(merged_df[pre_merge_col])])
+
             if not post_unmatched.empty:
-                st.warning(
-                    f"{len(post_unmatched)} rows from Post-Survey could not be merged.")
+                st.warning(f"{len(
+                    post_unmatched)} rows from Post-Survey could not be merged (No match in Pre-Survey).")
+                st.dataframe(post_unmatched, hide_index=True)
+
+                # Option to expand and view full rows
+                if st.checkbox("Show full unmatched Post-Survey rows"):
+                    st.dataframe(
+                        post_df[~post_df[post_merge_col].isin(merged_df[post_merge_col])])
 
         # Data Preprocessing
         if "merged_df" in st.session_state:
