@@ -138,13 +138,18 @@ if pre_file and post_file:
                 "scale_2": {"Not Confident At All": 1, "Not Very Confident": 2, "Neutral": 3, "Moderately Confident": 4, "Very Confident": 5},
                 "scale_3": {"Strongly Disagree": 1, "Disagree": 2, "Somewhat Disagree": 3, "Somewhat Agree": 4, "Agree": 5, "Strongly Agree": 6},
                 "scale_4": {"Not at all prepared": 1, "Slightly prepared": 2, "Prepared": 3, "Very prepared": 4, "Extremely prepared": 5},
-                "scale_5": {"Not at all confident": 1, "Slightly confident": 2, "Confident": 3, "Very confident": 4, "Extremely confident": 5}
+                "scale_5": {"Not at all confident": 1, "Slightly confident": 2, "Confident": 3, "Very confident": 4, "Extremely confident": 5},
+                "scale_6": {"Agree Strongly": 1, "Agree Somewhat": 2, "Neither Agree nor Disagree": 3, "Disagree Somewhat": 4, "Disagree Strongly": 5},
+                "scale_7": {"Very Important": 4, "Somewhat Important": 3, "A Little Important": 2, "Not at all Important": 1},
             }
 
             def detect_likert_scale(column_values):
+                unique_values = set(
+                    column_values.dropna().str.strip().str.lower())
                 for scale_name, scale_map in likert_scales.items():
-                    if set(column_values.dropna()).issubset(set(scale_map.keys())):
-                        return scale_name, scale_map
+                    scale_keys = set(map(str.lower, scale_map.keys()))
+                    if unique_values.issubset(scale_keys):
+                        return scale_name, {k.lower(): v for k, v in scale_map.items()}
                 return None, None
 
             # Detect Likert-compatible columns
@@ -165,7 +170,8 @@ if pre_file and post_file:
                     _, scale_map = detect_likert_scale(merged_df[col])
                     if scale_map:
                         new_col = col + "_mapped"
-                        merged_df[new_col] = merged_df[col].map(scale_map)
+                        merged_df[new_col] = merged_df[col].str.strip(
+                        ).str.lower().map(scale_map)
                         mapped_columns.append(new_col)
                     else:
                         failed_columns.append(col)
@@ -180,8 +186,8 @@ if pre_file and post_file:
 
                 # Show error messages for columns that failed
                 for col in failed_columns:
-                    st.error(f"❌ Could not map column: {
-                             col} - No matching Likert scale found.")
+                    st.error(
+                        f"❌ Could not map column: {col} - No matching Likert scale found.")
 
             # Store updates in session state
             st.session_state["merged_df"] = merged_df
