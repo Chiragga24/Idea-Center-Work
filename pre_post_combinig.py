@@ -155,18 +155,45 @@ if pre_file and post_file:
                 return value
 
             def detect_likert_scale(column_values):
-                """Detects the appropriate Likert scale for a column"""
-                unique_values = set(column_values.dropna().map(
-                    clean_text))  # Apply text cleaning
+                """Detects the appropriate Likert scale for a column while avoiding non-Likert text columns"""
+                # Define common Likert-related words to help filter non-Likert columns
+                LIKERT_KEYWORDS = {"strongly", "agree", "disagree", "important",
+                                   "satisfied", "likely", "never", "always", "often", "somewhat"}
+
+                # Clean text values and remove NaNs
+                unique_values = set(column_values.dropna().map(clean_text))
+                print(unique_values)
+
+                # Step 1: Check if the column contains Likert-style words
+                contains_likert_keywords = any(
+                    any(word in val.split() for word in LIKERT_KEYWORDS) for val in unique_values
+                )
+
+                print(contains_likert_keywords)
+
+                if not contains_likert_keywords:
+                    return None, None  # Skip non-Likert text columns
+
+                # Step 2: Check against predefined Likert scales
                 for scale_name, scale_map in likert_scales.items():
-                    # Clean the predefined scale values
                     scale_keys = set(map(clean_text, scale_map.keys()))
                     if unique_values.issubset(scale_keys):
                         return scale_name, {clean_text(k): v for k, v in scale_map.items()}
-                return None, None
+
+                new_scale_name = f"scale_{len(likert_scales) + 1}"
+                # Assign sequential numbers
+                new_scale_map = {val: i + 1 for i,
+                                 val in enumerate(sorted(unique_values))}
+
+                # Add it to the predefined scales dynamically
+                likert_scales[new_scale_name] = new_scale_map
+
+                return new_scale_name, new_scale_map
 
             def fuzzy_match(value, scale_map):
                 """Matches a given value to the closest Likert scale key using fuzzy matching"""
+                if not isinstance(value, str) or not value.strip():
+                    return None
                 match, score = process.extractOne(
                     value, scale_map.keys())  # Find best match
                 # Use threshold to avoid wrong matches
@@ -191,7 +218,7 @@ if pre_file and post_file:
                     if scale_map:
                         new_col = col + "_mapped"
                         merged_df[new_col] = merged_df[col].map(
-                            lambda x: fuzzy_match(clean_text(x), scale_map))
+                            lambda x: fuzzy_match(clean_text(x), scale_map) if pd.notnull(x) else None)
                         mapped_columns.append(new_col)
                     else:
                         failed_columns.append(col)
