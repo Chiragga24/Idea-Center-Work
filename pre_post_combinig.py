@@ -132,7 +132,10 @@ if pre_file and post_file:
                                    custom_value}'")
 
             # Likert Scale Mapping
+            from thefuzz import process
+
             st.subheader("Likert Scale Mapping")
+
             likert_scales = {
                 "scale_1": {"Strongly Agree": 5, "Agree": 4, "Neutral": 3, "Disagree": 2, "Strongly Disagree": 1},
                 "scale_2": {"Not Confident At All": 1, "Not Very Confident": 2, "Neutral": 3, "Moderately Confident": 4, "Very Confident": 5},
@@ -143,14 +146,31 @@ if pre_file and post_file:
                 "scale_7": {"Very Important": 4, "Somewhat Important": 3, "A Little Important": 2, "Not at all Important": 1},
             }
 
+            def clean_text(value):
+                """Removes numbers in parentheses and standardizes spacing/capitalization"""
+                if pd.isna(value):  # Handle NaN values
+                    return ""
+                if isinstance(value, str):
+                    return value.split("(")[0].strip().lower()
+                return value
+
             def detect_likert_scale(column_values):
-                unique_values = set(
-                    column_values.dropna().str.strip().str.lower())
+                """Detects the appropriate Likert scale for a column"""
+                unique_values = set(column_values.dropna().map(
+                    clean_text))  # Apply text cleaning
                 for scale_name, scale_map in likert_scales.items():
-                    scale_keys = set(map(str.lower, scale_map.keys()))
+                    # Clean the predefined scale values
+                    scale_keys = set(map(clean_text, scale_map.keys()))
                     if unique_values.issubset(scale_keys):
-                        return scale_name, {k.lower(): v for k, v in scale_map.items()}
+                        return scale_name, {clean_text(k): v for k, v in scale_map.items()}
                 return None, None
+
+            def fuzzy_match(value, scale_map):
+                """Matches a given value to the closest Likert scale key using fuzzy matching"""
+                match, score = process.extractOne(
+                    value, scale_map.keys())  # Find best match
+                # Use threshold to avoid wrong matches
+                return scale_map[match] if score > 80 else None
 
             # Detect Likert-compatible columns
             text_columns = merged_df.select_dtypes(include=["object"]).columns
@@ -170,8 +190,8 @@ if pre_file and post_file:
                     _, scale_map = detect_likert_scale(merged_df[col])
                     if scale_map:
                         new_col = col + "_mapped"
-                        merged_df[new_col] = merged_df[col].str.strip(
-                        ).str.lower().map(scale_map)
+                        merged_df[new_col] = merged_df[col].map(
+                            lambda x: fuzzy_match(clean_text(x), scale_map))
                         mapped_columns.append(new_col)
                     else:
                         failed_columns.append(col)
@@ -212,6 +232,10 @@ if pre_file and post_file:
                 if selected_pre_col:
                     default_post_col = selected_pre_col.replace(
                         "_pre", "_post") if "_pre" in selected_pre_col else None
+
+                    if default_post_col is None:
+                        default_post_col = selected_pre_col.replace(
+                            "_post", "_pre") if "_post" in selected_pre_col else None
 
                     # If an exact post column exists, use it; otherwise, allow manual selection
                     if default_post_col in numeric_cols:
